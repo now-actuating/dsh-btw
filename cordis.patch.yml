@@ -6,6 +6,6 @@
       config:
         timeoutMs: 120000
         sidechain:
-          mode: private-jsonl
+          mode: none
           retentionDays: 7
           maxSessions: 500

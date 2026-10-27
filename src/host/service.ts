@@ -10,6 +10,7 @@ import { snapshotContext } from './context-snapshot.js'
 import { runBtwOneShot } from './one-shot.js'
 import { PrivateSidechainKernel, type SidechainConfig } from './sidechain-kernel.js'
 import { createBtwRpcRoute } from './rpc-route.js'
+import { requireSafeCodexTransport } from './codex-transport.js'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -80,6 +81,7 @@ export function installBtwService(ctx: Context, config: BtwConfig = {}): void {
       try {
         signal.throwIfAborted()
         const snapshot = snapshotContext(agent, request.question)
+        requireSafeCodexTransport(ctx, snapshot.config.provider)
         sidechainId = sidechains.createId()
         try {
           await sidechains.begin(request.question, snapshot, sidechainId)

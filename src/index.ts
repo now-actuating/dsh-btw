@@ -5,7 +5,7 @@ import type {} from '@deepseek-ai/dsh-llm'
 import { Config, installBtwService, type BtwConfig } from './host/service.js'
 
 export const name = 'btw'
-export const inject = ['agents', 'connection', 'llm']
+export const inject = ['agents', 'connection', 'llm', 'loader']
 export { Config }
 export type { BtwConfig }
 

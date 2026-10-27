@@ -2,12 +2,12 @@ import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type { SubmitOutcome } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { BTW_ASK_ENDPOINT, BTW_RPC_CHANNEL, readAskResponse } from '../shared/protocol.js'
+import { BTW_ASK_ENDPOINT, BTW_RPC_CHANNEL, readAskResponse, type BtwUsage } from '../shared/protocol.js'
 
 export type BtwOverlayState =
   | { readonly status: 'closed' }
   | { readonly status: 'running'; readonly question: string }
-  | { readonly status: 'success'; readonly question: string; readonly response: string }
+  | { readonly status: 'success'; readonly question: string; readonly response: string; readonly usage?: BtwUsage }
   | { readonly status: 'error'; readonly question: string; readonly error: string }
 
 const CLOSED: BtwOverlayState = { status: 'closed' }
@@ -20,8 +20,11 @@ function requestId(): string {
 
 export class BtwController {
   readonly state: SnapshotStore<BtwOverlayState> = createSnapshotStore<BtwOverlayState>(CLOSED)
+  // Recall can display an old success while a newer question is still running.
+  readonly running: SnapshotStore<boolean> = createSnapshotStore(false)
   private active: AbortController | undefined
   private disposed = false
+  private lastSuccess: Extract<BtwOverlayState, { status: 'success' }> | undefined
 
   constructor(
     private readonly connection: ConnectionHandle,
@@ -31,10 +34,19 @@ export class BtwController {
 
   ask(rawQuestion: string): Promise<SubmitOutcome> {
     const question = rawQuestion.trim()
-    if (question === '') return Promise.resolve({ kind: 'error', text: 'Usage: /btw <your question>' })
+    if (this.disposed) return Promise.resolve({ kind: 'error', text: 'The BTW session is no longer available.' })
+    if (question === '') {
+      if (this.lastSuccess === undefined) {
+        return Promise.resolve({ kind: 'error', text: 'No previous BTW answer in this session. Use /btw <your question> first.' })
+      }
+      // Pure view recall: no RPC, retry, or cancellation of an active question.
+      this.state.set(this.lastSuccess)
+      return Promise.resolve({ kind: 'success' })
+    }
     this.active?.abort()
     const controller = new AbortController()
     this.active = controller
+    this.running.set(true)
     this.state.set({ status: 'running', question })
     void this.run(question, controller)
     // Release the input machine immediately.  The overlay owns the background
@@ -62,7 +74,10 @@ export class BtwController {
         this.state.set({ status: 'error', question, error: 'The BTW host returned an invalid response.' })
         return
       }
-      this.state.set({ status: 'success', question, response: response.response })
+      this.lastSuccess = { status: 'success', question, response: response.response,
+        ...(response.usage === undefined ? {} : { usage: response.usage }),
+      }
+      this.state.set(this.lastSuccess)
     } catch (error: unknown) {
       if (this.disposed || controller.signal.aborted || this.active !== controller) return
       if (timeout.aborted) {
@@ -72,18 +87,23 @@ export class BtwController {
       const message = error instanceof Error ? error.message : String(error)
       this.state.set({ status: 'error', question, error: message })
     } finally {
-      if (this.active === controller) this.active = undefined
+      if (this.active === controller) {
+        this.active = undefined
+        this.running.set(false)
+      }
     }
   }
 
   dismiss(): void {
     this.active?.abort()
     this.active = undefined
+    this.running.set(false)
     this.state.set(CLOSED)
   }
 
   dispose(): void {
     this.disposed = true
+    this.lastSuccess = undefined
     this.dismiss()
   }
 }

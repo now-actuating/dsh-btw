@@ -1,6 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore, type CSSProperties, type KeyboardEvent } from 'react'
 import { MarkdownText, type MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { BtwController } from './controller.js'
+import { cacheUsageLabel } from './cache-usage.js'
 
 export interface BtwOverlayInjected {
   readonly controller: BtwController
@@ -96,6 +97,10 @@ export function BtwOverlay({ controller }: BtwOverlayInjected) {
     listener => controller.state.subscribe(listener),
     () => controller.state.getSnapshot(),
   )
+  const running = useSyncExternalStore(
+    listener => controller.running.subscribe(listener),
+    () => controller.running.getSnapshot(),
+  )
   const root = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (state.status !== 'closed') root.current?.focus()
@@ -104,6 +109,7 @@ export function BtwOverlay({ controller }: BtwOverlayInjected) {
     if (state.status === 'closed') return
     const outside = (event: PointerEvent): void => {
       if (event.target instanceof Node && root.current?.contains(event.target)) return
+      if (controller.running.getSnapshot()) return
       controller.dismiss()
     }
     document.addEventListener('pointerdown', outside, true)
@@ -113,6 +119,9 @@ export function BtwOverlay({ controller }: BtwOverlayInjected) {
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') {
+      // Do not turn dismissal shortcuts into cancellation. Leaving native
+      // Enter/Space alone also keeps the explicit Cancel button accessible.
+      if (controller.running.getSnapshot()) return
       event.preventDefault()
       controller.dismiss()
       return
@@ -143,10 +152,15 @@ export function BtwOverlay({ controller }: BtwOverlayInjected) {
           )}
           {state.status === 'success' && <MarkdownText text={state.response} labels={markdownLabels} />}
         </div>
+        {state.status === 'success' && (
+          <div style={{ fontSize: 12, opacity: .8 }} data-btw-cache role="status">
+            {cacheUsageLabel(state.usage)}
+          </div>
+        )}
         <div style={footer}>
-          <span>{state.status === 'running' ? 'The main agent keeps running' : '↑/↓ scroll · Enter, Space, or Esc dismiss'}</span>
+          <span>{running ? 'The main agent keeps running · Cancel to stop this question' : '↑/↓ scroll · Enter, Space, or Esc dismiss'}</span>
           <button type="button" style={button} onClick={() => { controller.dismiss() }}>
-            {state.status === 'running' ? 'Cancel' : 'Close'}
+            {running ? 'Cancel' : 'Close'}
           </button>
         </div>
       </div>

@@ -66,6 +66,29 @@ describe('runBtwOneShot', () => {
     })
   })
 
+  it('uses the registered Codex adapter with parent cache identity, without cloning or replacing it', async () => {
+    const seen: GenerateOptions[] = []
+    const usage = { inputTokens: 100, outputTokens: 2, cacheReadTokens: 12000 }
+    const llm = {
+      prepareCall: async (config: BtwContextSnapshot['config']) => ({
+        config,
+        stream: (options: GenerateOptions) => {
+          seen.push(options)
+          return (async function* () { yield* chunks(); yield { type: 'usage' as const, usage } })()
+        },
+      }),
+    } as unknown as LlmRuntime
+    const snapshot = { parentSessionId: 'parent', config: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
+      tools: [{ name: 'bash', description: 'shell', parameters: { type: 'object' } }],
+      sharedMessages: [], messages: [], toolHistory: [] } as unknown as BtwContextSnapshot
+    const result = await runBtwOneShot(llm, snapshot, 'private-sidechain', new AbortController().signal)
+    expect(seen).toHaveLength(1)
+    expect(seen[0]?.sessionId).toBe('parent')
+    expect(seen[0]?.tools).toEqual(snapshot.tools)
+    expect(result.cacheStrategy).toBe('parent-session-prefix')
+    expect(result.usage?.cacheReadTokens).toBe(12000)
+  })
+
   it('surfaces a tool attempt instead of executing it', async () => {
     async function* toolChunks(): AsyncGenerator<StreamChunk> {
       yield {

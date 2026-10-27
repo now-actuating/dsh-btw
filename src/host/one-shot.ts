@@ -101,13 +101,21 @@ export async function runBtwOneShot(
   signal: AbortSignal,
 ): Promise<BtwOneShotResult> {
   let markerMoved = false
-  const piAi = btwPiAiAdapter(llm, snapshot.config.provider, () => { markerMoved = true })
+  // Never bypass the subscription's registered observer/compaction wrappers on
+  // Codex. The isolated delegate exists only for the upstream Anthropic bridge.
+  const piAi = snapshot.config.provider === 'openai-codex' ? undefined
+    : btwPiAiAdapter(llm, snapshot.config.provider, () => { markerMoved = true })
   const prepared = await llm.prepareCall(snapshot.config, signal)
+  // Codex's registered adapter maps sessionId to prompt_cache_key (and, in
+  // WebSocket mode, connection affinity). Reuse the parent's identity without
+  // creating a child Agent or writing to its journal. The private sidechain ID
+  // remains separate bookkeeping, never a provider cache key for this route.
+  const parentCacheIdentity = snapshot.config.provider === 'openai-codex'
   const common = {
     messages: snapshot.messages as RequestMessage[],
     ...(snapshot.system === undefined ? {} : { system: snapshot.system }),
     toolHistory: snapshot.toolHistory,
-    sessionId: SessionId(sidechainId),
+    sessionId: SessionId(parentCacheIdentity ? snapshot.parentSessionId : sidechainId),
     signal,
   }
 
@@ -141,7 +149,7 @@ export async function runBtwOneShot(
   return {
     response,
     ...(assembler.usage === undefined ? {} : { usage: assembler.usage }),
-    cacheStrategy: markerMoved ? 'anthropic-shared-prefix' : 'provider-managed',
+    cacheStrategy: markerMoved ? 'anthropic-shared-prefix' : parentCacheIdentity ? 'parent-session-prefix' : 'provider-managed',
     finishKind: finish.kind,
   }
 }

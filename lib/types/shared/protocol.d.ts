@@ -5,7 +5,7 @@ export interface BtwAskRequest {
     readonly sessionId: string;
     readonly question: string;
 }
-export type BtwCacheStrategy = 'anthropic-shared-prefix' | 'provider-managed';
+export type BtwCacheStrategy = 'anthropic-shared-prefix' | 'parent-session-prefix' | 'provider-managed';
 export interface BtwUsage {
     readonly inputTokens: number;
     readonly outputTokens: number;

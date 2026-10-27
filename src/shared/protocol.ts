@@ -9,6 +9,7 @@ export interface BtwAskRequest {
 
 export type BtwCacheStrategy =
   | 'anthropic-shared-prefix'
+  | 'parent-session-prefix'
   | 'provider-managed'
 
 export interface BtwUsage {
@@ -44,7 +45,7 @@ export function readAskResponse(value: unknown): BtwAskResponse | undefined {
   if (typeof source.requestId !== 'string' || typeof source.sidechainId !== 'string' || typeof source.response !== 'string') {
     return undefined
   }
-  if (source.cacheStrategy !== 'anthropic-shared-prefix' && source.cacheStrategy !== 'provider-managed') return undefined
+  if (source.cacheStrategy !== 'anthropic-shared-prefix' && source.cacheStrategy !== 'parent-session-prefix' && source.cacheStrategy !== 'provider-managed') return undefined
   const usage = readUsage(source.usage)
   if (source.usage !== undefined && usage === undefined) return undefined
   return {
