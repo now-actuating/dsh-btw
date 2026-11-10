@@ -70,6 +70,10 @@ minimumReleaseAgeExclude:
 # from this checkout on Windows junctions. Production profiles keep their own
 # isolated node_modules; this setting only affects the plugin repository.
 nodeLinker: hoisted
+allowBuilds:
+  '@google/genai': false
+  esbuild: false
+  protobufjs: false
 # Keep DSH's coordinated release graph coherent during local builds.
 # These overrides select official versions; no official package is replaced.
 overrides:
